@@ -1,3 +1,4 @@
+
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -12,8 +13,16 @@
 // |         usado como 2o retorno! <-----+
 // v                                      v
 double* load_vector(const char* filename, int* out_size);
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+struct arg_struct {
+    double *a;
+    double *b;
+    double *c;
+    int position;
 
+};
+void *sum(void *arg);
 int main(int argc, char* argv[]) {
     srand(time(NULL));
 
@@ -26,7 +35,7 @@ int main(int argc, char* argv[]) {
                "    -silent      não imprime resultado na saída\n", argv[0]);
         return 1;
     }
-  
+
     //Quantas threads?
     int n_threads = atoi(argv[1]);
     if (!n_threads) {
@@ -50,25 +59,38 @@ int main(int argc, char* argv[]) {
                            //^--->  0 se argv[4] == "-silent"
                            //|---> -1 se argv[4] <  "-silent"
                            //+---> +1 se argv[4] >  "-silent"
-    
+
     //Garante que entradas são compatíveis
     if (a_size != b_size) {
         printf("Vetores a e b tem tamanhos diferentes! (%d != %d)\n", a_size, b_size);
         return 1;
     }
-    //Cria vetor do resultado 
+    //Cria vetor do  resultado
     double* c = malloc(a_size*sizeof(double));
 
-    // Calcula com uma thread só. Programador original só deixou a leitura 
-    // do argumento e fugiu pro caribe. É essa computação que você precisa 
+    // Calcula com uma thread só. Programador original só deixou a leitura
+    // do argumento e fugiu pro caribe. É essa computação que você precisa
     // paralelizar
-    for (int i = 0; i < a_size; ++i) 
-        c[i] = a[i] + b[i];
-    
-    
+    pthread_t thread_id[n_threads];
+    struct arg_struct pointers;
+
+    pointers.a=a;
+    pointers.b=b;
+    pointers.c=c;
+
+
+    //struct arg_struct *args = malloc(sizeof(struct arg_struct));
+    for (int i = 0; i < n_threads; ++i) {
+        int rec=(int)a_size;
+        pointers.position = (i%rec);
+        pthread_create(&thread_id[i], NULL, sum , (void*)&pointers);
+        pthread_join(thread_id[i], NULL);
+    }
+
+
     //Imprime resultados
     if (!silent) {
-        for (int i = 0; i < a_size; ++i) 
+        for (int i = 0; i < a_size; ++i)
             printf("%s%g", i ? " " : "", c[i]);
         printf("\n");
     }
@@ -79,4 +101,18 @@ int main(int argc, char* argv[]) {
     free(c);
 
     return 0;
+}
+
+
+void *sum(void *arg){
+ int posit = (*((struct arg_struct*)arg)).position;
+ double *a = (*((struct arg_struct*)arg)).a;
+ double *b = (*((struct arg_struct*)arg)).b;
+ double *c = (*((struct arg_struct*)arg)).c;
+
+  pthread_mutex_lock(&mutex);
+  c[posit] = a[posit] + b[posit];
+  pthread_mutex_unlock(&mutex);
+  return NULL;
+
 }
